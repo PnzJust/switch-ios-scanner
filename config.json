@@ -1,0 +1,9 @@
+{
+    "IP": "192.168.1.200",
+    "PROTOCOL": "telnet",
+    "PASSWORD": "pass3",
+    "PORT": 23,
+    "CONSOLE_PASSWD": "pass3",
+    "TIMEOUT": 3,
+    "OUTPUT": "txt"
+}
