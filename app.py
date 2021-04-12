@@ -4,13 +4,41 @@ import pytest
 import json
 import paramiko
 import regex as re
+import warnings
+from termcolor import colored
 
 
-@pytest.fixture
-def connect():
+@pytest.fixture(scope="session")
+def args():
     with open('config.json') as f:
         args = json.load(f)
+    if "IP" not in args:
+        raise Exception("IP should be mentioned in config.json")
+    elif not re.match(r"((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4}",
+                  args["IP"]):
+        raise Exception("The IP is not valid.")
 
+    if "PROTOCOL" not in args:
+        raise Exception("PROTOCOL should be mentioned in config.json")
+    elif args["PROTOCOL"] not in ["telnet", "ssh"]:
+        raise Exception("Invalid protocol. Use telnet or ssh.")
+
+    if "PASSWORD" not in args:
+        raise Exception("PASSWORD should be mentioned in config.json")
+
+    if "PORT" not in args:
+        raise Exception("PORT should be mentioned in config.json")
+    elif int(args["PORT"]) != args["PORT"] or \
+         int(args["PORT"]) not in range(65536):
+        raise Exception("Invalid port.")
+
+    if "TIMEOUT" not in args:
+        raise Exception("TIMEOUT should be mentioned in config.json")
+
+    return args
+
+@pytest.fixture(scope="function")
+def connect(args):
     if args['PROTOCOL'] == "telnet":
         from telnetlib import Telnet
         conn = Telnet(args['IP'], args['PORT'])
@@ -28,7 +56,6 @@ def connect():
 
     conn.close()
 
-
 def read_all(connection, command, timeout=1):
     connection.write(str.encode(command))
     resp = connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
@@ -37,19 +64,36 @@ def read_all(connection, command, timeout=1):
         resp += connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
     return resp
 
-@pytest.mark.xfail
+def all_interfaces(conn):
+    response = read_all(connection=conn, command='show interfaces status\n').decode('ascii')
+    re_interfaces = re.findall(r"((Fa|Gi)([0-9]*/)*[0-9]*) +(notconnect|connected|disabled)", response)
+    interfaces = [(interface[0], interface[3]) for interface in re_interfaces]
+    return interfaces
+
 def test_native_vlan(connect):
     response = read_all(connection=connect, command='show vlan\n').decode('ascii')
     vlan_1 = re.search(r'([1]) +([a-zA-Z-/]+) +', response).groups() 
-    assert vlan_1[1] != "default", "The native vlan should not be vlan 1. \
+    if vlan_1[1] == "default":
+        warnings.warn(colored("The native vlan should not be vlan 1. \
 Move the user trafic to a different vlan. The native VLAN is used for a lot \
 of management data such as DTP, VTP and CDP frames and also BPDU's for \
 spanning tree. Try changing the native vlan to a different created vlan. Eg. \
-command: Switch(config)#default vlan ANY-NUMBER-BUT-NOT-1"
+command: Switch(config)#default vlan ANY-NUMBER-BUT-NOT-1", "yellow"), Warning)
 
 def test_switchport_mac_address(connect):
-    # port-security sa fie enable
-    pass
+    interfaces = all_interfaces(conn=connect)
+    no_port_security_interfacs = ""
+    for interface in interfaces:
+        if interface[1] == "connected":
+            response = read_all(connection=connect, command='show port-security interface ' + interface[0] + ' \n').decode('ascii')
+            status = re.search(r"Port Security +: (.*)", response).groups()
+            if "Enabled" not in status:
+                no_port_security_interfacs += interface[0] + " " 
+    raise Exception(colored("Port Security is not enabled for interfaces: {}.\
+This missconfiguration could lead do different vulnerabilites like:\
+MITM, CAM overflow. You should enable the port-security on \
+all access ports. Eg. command: Switch(config-if)#switchport \
+port-security".format(no_port_security_interfacs), "red"))
 
 def test_switchport_violation(connect):
     # port-security sa fie RESTRICT sau SHUTDOWN

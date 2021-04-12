@@ -4,6 +4,5 @@
     "PASSWORD": "pass3",
     "PORT": 23,
     "CONSOLE_PASSWD": "pass3",
-    "TIMEOUT": 3,
-    "OUTPUT": "txt"
+    "TIMEOUT": 2
 }
