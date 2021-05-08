@@ -37,6 +37,7 @@ def args():
 
     return args
 
+
 @pytest.fixture(scope="function")
 def connect(args):
     if args['PROTOCOL'] == "telnet":
@@ -56,6 +57,7 @@ def connect(args):
 
     conn.close()
 
+
 def read_all(connection, command, timeout=1):
     connection.write(str.encode(command))
     resp = connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
@@ -64,11 +66,13 @@ def read_all(connection, command, timeout=1):
         resp += connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
     return resp
 
+
 def all_interfaces(conn):
     response = read_all(connection=conn, command='show interfaces status\n').decode('ascii')
     re_interfaces = re.findall(r"((Fa|Gi)([0-9]*/)*[0-9]*) +(notconnect|connected|disabled)", response)
     interfaces = [(interface[0], interface[3]) for interface in re_interfaces]
     return interfaces
+
 
 def test_native_vlan(connect):
     response = read_all(connection=connect, command='show vlan\n').decode('ascii')
@@ -80,24 +84,40 @@ of management data such as DTP, VTP and CDP frames and also BPDU's for \
 spanning tree. Try changing the native vlan to a different created vlan. Eg. \
 command: Switch(config)#default vlan ANY-NUMBER-BUT-NOT-1", "yellow"), Warning)
 
-def test_switchport_mac_address(connect):
+
+def test_switchport_port_security(connect):
     interfaces = all_interfaces(conn=connect)
-    no_port_security_interfacs = ""
+    no_port_security_interfaces = ""
     for interface in interfaces:
         if interface[1] == "connected":
             response = read_all(connection=connect, command='show port-security interface ' + interface[0] + ' \n').decode('ascii')
             status = re.search(r"Port Security +: (.*)", response).groups()
-            if "Enabled" not in status:
-                no_port_security_interfacs += interface[0] + " " 
-    raise Exception(colored("Port Security is not enabled for interfaces: {}.\
-This missconfiguration could lead do different vulnerabilites like:\
+            if "Enabled\r" not in status[0]:
+                no_port_security_interfaces += interface[0] + " " 
+    if no_port_security_interfaces:
+        raise Exception(colored("Port Security is not enabled for interfaces: {}.\
+This missconfiguration could lead to different vulnerabilites like:\
 MITM, CAM overflow. You should enable the port-security on \
 all access ports. Eg. command: Switch(config-if)#switchport \
-port-security".format(no_port_security_interfacs), "red"))
+port-security".format(no_port_security_interfaces), "red"))
 
-def test_switchport_violation(connect):
-    # port-security sa fie RESTRICT sau SHUTDOWN
-    pass
+
+def test_switchport_port_security_violation(connect):
+    interfaces = all_interfaces(conn=connect)
+    no_port_security_violation_interfaces = ""
+    for interface in interfaces:
+        if interface[1] == "connected":
+            response = read_all(connection=connect, command='show port-security interface ' + interface[0] + ' \n').decode('ascii')
+            status = re.search(r"Violation Mode +: (.*)", response).groups()
+            if "Restrict\r" not in status[0] and "Shutdown\r" not in status[0]:
+                no_port_security_violation_interfaces += interface[0] + " " 
+    if no_port_security_violation_interfaces:
+        raise Exception(colored("Port Security Violation Mode is not enabled for interfaces: {}.\
+This missconfiguration could lead to different vulnerabilites like:\
+MITM, CAM overflow. You should enable the port-security on \
+all access ports. Eg. command: Switch(config-if)#switchport \
+port-security".format(no_port_security_violation_interfaces), "red"))
+
 
 def test_cdp(connect):
     # sa fie disabled (cmd: no cdp run) pt ca mesajele cdp sunt 
