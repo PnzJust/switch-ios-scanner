@@ -198,69 +198,73 @@ config file.", "yellow"), Warning)
 
 
 def test_vtp_password(connect):
-    # de preferat sa aiba o parola (sh vtp pass)
-    pass
+    # de preferat sa aiba o parola (sh vtp status)
+    response = read_all(connection=connect, command='show vtp status\n')
+    status = re.search(r"VTP Operating Mode +: (.*)", response).groups()
+    status = status[0][:-1]
+    if status != 'Transparent':
+        print(status)
+        response = read_all(connection=connect, command='show vtp password\n')
+        if ':' not in response:
+            raise Exception(colored("VTP is runnig without a password.", "red"))
 
-def test_bpdu_guard(connect):
-    # sa fie enablat pe toate porturile
-    pass
 
 def test_telnet(connect):
     # sa fie disabled, sa se limiteze accesul liniilor vty
     # sa se foloseasca servere RADIUS pentru AAA
-    pass
+    response = read_all(connection=connect, command='show running-config | include telnet\n', timeout=5).split('\n')
+    if len(response) > 3:
+        warnings.warn(colored("Telnet is enabled. You should use \
+ssh otherwise your trafic will be unencrypted.", "yellow"), Warning)
 
-def test_plaintext_passwords(connect):
-    # sa nu fie salvata nici o parola in plaintext
-    pass
 
 def test_dtp(connect):
     # disabled dtp pentru a nu se forta un trunk intre switch si atacator
-    pass
+    response = read_all(connection=connect, command='show dtp\n').split('\n')
+    response = response[-2][1:-1]
+    if not response.startswith('0'):
+        raise Exception(colored("DTP is runnig on {} port(s). You \
+should disable DTP on all runnig ports so any attacker \
+could not force a trunk between him and switch.".format(response.split(" ")[0]), "red"))
+
 
 def test_dhcp(connect):
     # DHCP snooping
-    pass
+    response = read_all(connection=connect, command='show running-config | include ip dhcp snooping\n', timeout=5)
+    if len(response.split('\n')) < 4:
+        raise Exception(colored("DHCP is not runnig in snooping mode. This \
+could lead to vulnerabilites like DHCP starving or DHCP rogue.", "red"))
 
-def test_vty_password(connect):
-    # trebuie enablata
-    pass
-
-def test_snmp(connect):
-    # disable (info disclosure)
-    pass
-
-def test_source_routing(connect):
-    # disable (no ip source-route)
-    pass
-
-def test_subnet_broadcast(connect):
-    # disable (no ip directed-broadcast)
-    pass
 
 def test_tcp_small_servers(connect):
     # disable (no service tcp-small-servers)
-    pass
+    response = read_all(connection=connect, command='show running-config | include service tcp-small-servers\n', timeout=5)
+    if len(response.split('\n')) > 3:
+        warnings.warn(colored("Tcp-small-servers service is runnig.", "yellow"), Warning)
+
 
 def test_udp_small_servers(connect):
     # disable (no service udp-small-servers)
-    pass
+    response = read_all(connection=connect, command='show running-config | include service udp-small-servers\n', timeout=5)
+    if len(response.split('\n')) > 3:
+        warnings.warn(colored("Udp-small-servers service is runnig.", "yellow"), Warning)
+
 
 def test_service_finger(connect):
     # disable (no service finger)
+    response = read_all(connection=connect, command='show running-config | include finger\n', timeout=5)
+    if len(response.split('\n')) > 3:
+        warnings.warn(colored("Finger service is runnig.", "yellow"), Warning)
+
+
+def test_all_ports_are_healthy(connect):
     pass
 
-def test_log_review(connect):
-    # snmp log target
-    pass
-
-def test_dynamic_routing_keys(connect):
-    # protocol authenitcation-key
-    pass
 
 def test_icmp_redirects(connect):
     # deny icmp any any
     pass
+
 
 def test_proxy_arp(connect):
     # no ip proxy-arp
@@ -274,9 +278,6 @@ def test_802_1q(connect):
     pass
 
 def test_stp(connect):
-    pass
-
-def test_vqp(connect):
     pass
 
 def test_root_guard(connect):
