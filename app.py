@@ -1,41 +1,41 @@
 #!/usr/bin/env python3.8
 
-import pytest
 import json
+import warnings
+import pytest
 import paramiko
 import regex as re
-import warnings
 from termcolor import colored
 
 
 @pytest.fixture(scope="session")
 def args():
-    with open('config.json') as f:
-        args = json.load(f)
-    if "IP" not in args:
+    with open('config.json') as file:
+        file_args = json.load(file)
+    if "IP" not in file_args:
         raise Exception("IP should be mentioned in config.json")
     elif not re.match(r"((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4}",
-                  args["IP"]):
+                  file_args["IP"]):
         raise Exception("The IP is not valid.")
 
-    if "PROTOCOL" not in args:
+    if "PROTOCOL" not in file_args:
         raise Exception("PROTOCOL should be mentioned in config.json")
-    elif args["PROTOCOL"] not in ["telnet", "ssh"]:
+    elif file_args["PROTOCOL"] not in ["telnet", "ssh"]:
         raise Exception("Invalid protocol. Use telnet or ssh.")
 
-    if "PASSWORD" not in args:
+    if "PASSWORD" not in file_args:
         raise Exception("PASSWORD should be mentioned in config.json")
 
-    if "PORT" not in args:
+    if "PORT" not in file_args:
         raise Exception("PORT should be mentioned in config.json")
-    elif int(args["PORT"]) != args["PORT"] or \
-         int(args["PORT"]) not in range(65536):
+    elif int(file_args["PORT"]) != file_args["PORT"] or \
+         int(file_args["PORT"]) not in range(65536):
         raise Exception("Invalid port.")
 
-    if "TIMEOUT" not in args:
+    if "TIMEOUT" not in file_args:
         raise Exception("TIMEOUT should be mentioned in config.json")
 
-    return args
+    return file_args
 
 
 @pytest.fixture(scope="function")
@@ -69,7 +69,8 @@ def read_all(connection, command, timeout=1):
 
 def all_interfaces(conn):
     response = read_all(connection=conn, command='show interfaces status\n')
-    re_interfaces = re.findall(r"((Fa|Gi)([0-9]*/)*[0-9]*) +(notconnect|connected|disabled)", response)
+    re_interfaces = re.findall(r"((Fa|Gi)([0-9]*/)*[0-9]*) +(notconnect|connected|disabled)",
+                               response)
     interfaces = [(interface[0], interface[3]) for interface in re_interfaces]
     return interfaces
 
@@ -83,7 +84,7 @@ def all_vlans(conn):
 
 def test_native_vlan(connect):
     response = read_all(connection=connect, command='show vlan\n')
-    vlan_1 = re.search(r'([1]) +([a-zA-Z-/]+) +', response).groups() 
+    vlan_1 = re.search(r'([1]) +([a-zA-Z-/]+) +', response).groups()
     if vlan_1[1] == "default":
         warnings.warn(colored("The native vlan should not be vlan 1. \
 Move the user trafic to a different vlan. The native VLAN is used for a lot \
@@ -97,10 +98,11 @@ def test_switchport_port_security(connect):
     no_port_security_interfaces = ""
     for interface in interfaces:
         if interface[1] == "connected":
-            response = read_all(connection=connect, command='show port-security interface ' + interface[0] + ' \n')
+            response = read_all(connection=connect,
+                                command='show port-security interface ' + interface[0] + ' \n')
             status = re.search(r"Port Security +: (.*)", response).groups()
             if "Enabled\r" not in status[0]:
-                no_port_security_interfaces += interface[0] + " " 
+                no_port_security_interfaces += interface[0] + " "
     if no_port_security_interfaces:
         raise Exception(colored("Port Security is not enabled for interfaces: {}.\
 This missconfiguration could lead to different vulnerabilites like:\
@@ -114,10 +116,11 @@ def test_switchport_port_security_violation(connect):
     no_port_security_violation_interfaces = ""
     for interface in interfaces:
         if interface[1] == "connected":
-            response = read_all(connection=connect, command='show port-security interface ' + interface[0] + ' \n')
+            response = read_all(connection=connect,
+                                command='show port-security interface ' + interface[0] + ' \n')
             status = re.search(r"Violation Mode +: (.*)", response).groups()
             if "Restrict\r" not in status[0] and "Shutdown\r" not in status[0]:
-                no_port_security_violation_interfaces += interface[0] + " " 
+                no_port_security_violation_interfaces += interface[0] + " "
     if no_port_security_violation_interfaces:
         raise Exception(colored("Port Security Violation Mode is not enabled for interfaces: {}.\
 This missconfiguration could lead to different vulnerabilites like:\
@@ -127,19 +130,20 @@ port-security".format(no_port_security_violation_interfaces), "red"))
 
 
 def test_cdp(connect):
-    # sa fie disabled (cmd: no cdp run) pt ca mesajele cdp sunt 
+    # sa fie disabled (cmd: no cdp run) pt ca mesajele cdp sunt
     # neencriptate/neautentificate
     interfaces = all_interfaces(conn=connect)
     cdp_interfaces = ""
     for interface in interfaces:
         if interface[1] == "connected":
-            response = read_all(connection=connect, command='show cdp interface ' + interface[0] + ' \n')
+            response = read_all(connection=connect,
+                                command='show cdp interface ' + interface[0] + ' \n')
             status = re.search(r"(.*) (is) (.*),(.*)", response)
             if status is  None:
                 continue
             status = status.groups()
             if status[2] == "up":
-                cdp_interfaces += interface[0] + " " 
+                cdp_interfaces += interface[0] + " "
     if cdp_interfaces:
         raise Exception(colored("CDP is enabled for interfaces: {}.\
 This missconfiguration could lead to information disclosure because \
@@ -158,7 +162,9 @@ could delete this statement and review your access lists.", "yellow"), Warning)
 
 def test_console_password(connect):
     # de preferat sa existe parola pe consola
-    response = read_all(connection=connect, command='show running-config | begin line con 0\n', timeout=5).split('\n')
+    response = read_all(connection=connect,
+                        command='show running-config | begin line con 0\n',
+                        timeout=5).split('\n')
     line_console_0_response = [response[2][:-1]]
     for e in response[3:]:
         if e[0] != ' ':
@@ -191,7 +197,9 @@ config file.", "yellow"), Warning)
 
 def test_enable_password(connect):
     # de preferat sa existe parola pe enable
-    response = read_all(connection=connect, command='show running-config | include enable password\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include enable password\n',
+                        timeout=5)
     password = response.split('\n')
     if len(password) < 4:
         warnings.warn(colored("You forgot to use a password for switch configuration. \
@@ -219,7 +227,9 @@ def test_vtp_password(connect):
 def test_telnet(connect):
     # sa fie disabled, sa se limiteze accesul liniilor vty
     # sa se foloseasca servere RADIUS pentru AAA
-    response = read_all(connection=connect, command='show running-config | include telnet\n', timeout=5).split('\n')
+    response = read_all(connection=connect,
+                        command='show running-config | include telnet\n',
+                        timeout=5).split('\n')
     if len(response) > 3:
         warnings.warn(colored("Telnet is enabled. You should use \
 ssh otherwise your trafic will be unencrypted.", "yellow"), Warning)
@@ -237,7 +247,9 @@ could not force a trunk between him and switch.".format(response.split(" ")[0]),
 
 def test_dhcp(connect):
     # DHCP snooping
-    response = read_all(connection=connect, command='show running-config | include ip dhcp snooping\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include ip dhcp snooping\n',
+                        timeout=5)
     if len(response.split('\n')) < 4:
         raise Exception(colored("DHCP is not runnig in snooping mode. This \
 could lead to vulnerabilites like DHCP starving or DHCP rogue.", "red"))
@@ -245,21 +257,27 @@ could lead to vulnerabilites like DHCP starving or DHCP rogue.", "red"))
 
 def test_tcp_small_servers(connect):
     # disable (no service tcp-small-servers)
-    response = read_all(connection=connect, command='show running-config | include service tcp-small-servers\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include service tcp-small-servers\n',
+                        timeout=5)
     if len(response.split('\n')) > 3:
         warnings.warn(colored("Tcp-small-servers service is runnig.", "yellow"), Warning)
 
 
 def test_udp_small_servers(connect):
     # disable (no service udp-small-servers)
-    response = read_all(connection=connect, command='show running-config | include service udp-small-servers\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include service udp-small-servers\n',
+                        timeout=5)
     if len(response.split('\n')) > 3:
         warnings.warn(colored("Udp-small-servers service is runnig.", "yellow"), Warning)
 
 
 def test_service_finger(connect):
     # disable (no service finger)
-    response = read_all(connection=connect, command='show running-config | include finger\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include finger\n',
+                        timeout=5)
     if len(response.split('\n')) > 3:
         warnings.warn(colored("Finger service is runnig.", "yellow"), Warning)
 
@@ -273,7 +291,8 @@ def test_all_ports_are_healthy(connect):
 
 
 def test_return_ips(connect):
-    response = read_all(connection=connect, command='show ip interface brief | exclude unassigned\n')
+    response = read_all(connection=connect,
+                        command='show ip interface brief | exclude unassigned\n')
     response = re.findall(r"((FastEthernet|GigabitEthernet|Vlan)([0-9]*/*)*) +(.*) +(.*)", response)
     if response:
         print("\nInterfaces IPs:")
@@ -299,25 +318,31 @@ Now devices could attach to LANs and WLANs.", "red"))
 
 
 def test_stp_bpduguard(connect):
-    response = read_all(connection=connect, command='show spanning-tree summary totals | include BPDU Guard\n')
+    response = read_all(connection=connect,
+                        command='show spanning-tree summary totals | include BPDU Guard\n')
     if "disabled" in response:
         raise Exception(colored("BPDU guard is disabled. This could lead to STP attacks.", "red"))
 
 
 def test_stp_root_guard(connect):
-    response = read_all(connection=connect, command='show running-config | include spanning-tree guard root\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include spanning-tree guard root\n',
+                        timeout=5)
     if len(response.split('\n')) < 4:
         warnings.warn(colored("STP guard root is not enabled on your switch.", "yellow"), Warning)
 
 
 def test_stp_loopguard(connect):
-    response = read_all(connection=connect, command='show spanning-tree summary totals | include Loopguard Default\n')
+    response = read_all(connection=connect,
+                        command='show spanning-tree summary totals | include Loopguard Default\n')
     if "disabled" in response:
         raise Exception(colored("LOOP guard is disabled. This could lead to STP attacks.", "red"))
 
 
 def test_banner_login(connect):
-    response = read_all(connection=connect, command='show running-config | include banner login\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include banner login\n',
+                        timeout=5)
     response = response.split("\n")
     if len(response) > 3:
         response = response[2].split(" ")[2][2:-3]
@@ -325,7 +350,9 @@ def test_banner_login(connect):
 
 
 def test_banner_motd(connect):
-    response = read_all(connection=connect, command='show running-config | include banner motd\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include banner motd\n',
+                        timeout=5)
     response = response.split("\n")
     if len(response) > 3:
         response = response[2].split(" ")[2][2:-3]
@@ -335,14 +362,18 @@ def test_banner_motd(connect):
 def test_igmp_snooping(connect):
     vlans = all_vlans(conn=connect)
     for vlan in vlans:
-        response = read_all(connection=connect, command='show ip  igmp snooping vlan {} | begin Vlan {}\n'.format(vlan[0], vlan[0]))
+        response = read_all(connection=connect,
+                            command='show ip  igmp snooping \
+vlan {} | begin Vlan {}\n'.format(vlan[0], vlan[0]))
         if "Disabled" in response.split("\n")[3]:
             raise Exception(colored("IGMP snooping is not enabled for VLAN \
 {}. This could lead to DoS attacks.".format(vlan[0]), "red"))
 
 
 def test_aaa(connect):
-    response = read_all(connection=connect, command='show running-config | include aaa\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include aaa\n',
+                        timeout=5)
     if len(response.split("\n")) < 4:
         warnings.warn(colored("AAA protocol is not enabled on your switch.", "yellow"), Warning)
 
@@ -352,11 +383,14 @@ def test_errdisable(connect):
     response = re.findall(r"([a-zA-Z0-9]*) +(Enabled|Disabled).*", response)
     for e in response:
         if e[1] == 'Disabled':
-            warnings.warn(colored("{} has errdisable detection disabled".format(e[0]), "yellow"), Warning)
+            warnings.warn(colored("{} has errdisable detection disabled".format(e[0]), "yellow"),
+                          Warning)
 
 
 def test_hostname(connect):
-    response = read_all(connection=connect, command='show running-config | include hostname\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include hostname\n',
+                        timeout=5)
     response = response.split("\n")
     if len(response) > 3:
         response = response[2]
@@ -373,17 +407,22 @@ def test_privilege(connect):
 
 
 def test_default_gateway(connect):
-    response = read_all(connection=connect, command='show running-config | include ip default-gateway\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include ip default-gateway\n',
+                        timeout=5)
     response = response.split("\n")
     if len(response) < 4:
         print("Switch is not accessible from the internet")
     else:
         response = response[2].split(" ")
-        warnings.warn(colored("Switch is accessible from the internet throught the ip: " + str(response[2]), "yellow"), Warning)
+        warnings.warn(colored("Switch is accessible from the internet throught the \
+ip: " + str(response[2]), "yellow"), Warning)
 
 
 def test_vmps(connect):
-    response = read_all(connection=connect, command='show running-config | include vmps server\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include vmps server\n',
+                        timeout=5)
     response = response.split("\n")
     if len(response) < 4:
         warnings.warn(colored("VMPS is not enabled.", "yellow"), Warning)
@@ -394,7 +433,9 @@ def test_vmps(connect):
 
 
 def test_tacacs_server(connect):
-    response = read_all(connection=connect, command='show running-config | include tacacs-server\n', timeout=5)
+    response = read_all(connection=connect,
+                        command='show running-config | include tacacs-server\n',
+                        timeout=5)
     response = response.split("\n")
     host = False
     key = False
