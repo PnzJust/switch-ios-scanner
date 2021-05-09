@@ -74,6 +74,13 @@ def all_interfaces(conn):
     return interfaces
 
 
+def all_vlans(conn):
+    response = read_all(connection=conn, command='show vlan brief\n')
+    re_vlans = re.findall(r"([0-9]+) +([a-zA-Z0-9]*) +active(.*)", response)
+    vlans = [(vlan[0], vlan[1]) for vlan in re_vlans]
+    return vlans
+
+
 def test_native_vlan(connect):
     response = read_all(connection=connect, command='show vlan\n')
     vlan_1 = re.search(r'([1]) +([a-zA-Z-/]+) +', response).groups() 
@@ -258,129 +265,77 @@ def test_service_finger(connect):
 
 
 def test_all_ports_are_healthy(connect):
-    pass
+    response = read_all(connection=connect, command='show ip interface brief\n')
+    response = re.findall(r"((FastEthernet|GigabitEthernet|Vlan)([0-9]*/*)*) +(.*) +(.*)", response)
+    for e in response:
+        if "YES" not in e[3]:
+            warnings.warn(colored("{} is not ok.".format(e[0]), "yellow"), Warning)
 
 
-def test_icmp_redirects(connect):
-    # deny icmp any any
-    pass
+def test_return_ips(connect):
+    response = read_all(connection=connect, command='show ip interface brief | exclude unassigned\n')
+    response = re.findall(r"((FastEthernet|GigabitEthernet|Vlan)([0-9]*/*)*) +(.*) +(.*)", response)
+    if response:
+        print("\nInterfaces IPs:")
+        for e in response:
+            print ("{}: {}".format(e[0], e[3].split(" ")[0]))
 
 
-def test_proxy_arp(connect):
-    # no ip proxy-arp
-    pass
+def test_return_active_vlans(connect):
+    response = read_all(connection=connect, command='show vlan brief\n')
+    response = re.findall(r"([0-9]+) +([a-zA-Z0-9]*) +active(.*)", response)
+    if response:
+        print("\nActive Vlans and their names:")
+        for e in response:
+            print("VLAN{} <-> {}".format(e[0], e[1]))
 
-def test_llc(connect):
-    # disable (set spantree root)
-    pass
 
-def test_802_1q(connect):
-    pass
+def test_802_1x(connect):
+    # sysauthcontrol should be Enabled
+    response = read_all(connection=connect, command='show dot1x | include Sysauthcontrol\n')
+    if "Disabled" in response:
+        raise Exception(colored("802.1X authentication mechanism is not enabled. \
+Now devices could attach to LANs and WLANs.", "red"))
 
-def test_stp(connect):
-    pass
 
-def test_root_guard(connect):
-    pass
+def test_stp_bpduguard(connect):
+    response = read_all(connection=connect, command='show spanning-tree summary totals | include BPDU Guard\n')
+    if "disabled" in response:
+        raise Exception(colored("BPDU guard is disabled. This could lead to STP attacks.", "red"))
 
-def test_etherchannel_guard(connect):
-    pass
 
-def test_loop_guard(connect):
-    pass
+def test_stp_root_guard(connect):
+    response = read_all(connection=connect, command='show running-config | include spanning-tree guard root\n', timeout=5)
+    if len(response.split('\n')) < 4:
+        warnings.warn(colored("STP guard root is not enabled on your switch.", "yellow"), Warning)
 
-def test_mtu_master_interface(connect):
-    pass
 
-def test_bandwith(connect):
-    pass
+def test_stp_loopguard(connect):
+    response = read_all(connection=connect, command='show spanning-tree summary totals | include Loopguard Default\n')
+    if "disabled" in response:
+        raise Exception(colored("LOOP guard is disabled. This could lead to STP attacks.", "red"))
 
-def test_sfp(connect):
-    pass
 
-def test_virtual_link_aggregation_group(connect):
-    pass
+def test_banner_login(connect):
+    response = read_all(connection=connect, command='show running-config | include banner login\n', timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2].split(" ")[2][2:-3]
+        print("Banner login: ", response)
+
+
+def test_banner_motd(connect):
+    response = read_all(connection=connect, command='show running-config | include banner motd\n', timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2].split(" ")[2][2:-3]
+        print("Banner motd: ", response)
+
 
 def test_igmp_snooping(connect):
-    pass
-
-def test_lacp(connect):
-    pass
-
-def test_dhcp_relay(connect):
-    pass
-
-def test_lldp(connect):
-    pass
-
-def test_fdb(connect):
-    pass
-
-def test_pagp(connect):
-    pass
-
-def test_mpls(connect):
-    pass
-
-def test_aaa(connect):
-    pass
-
-def test_alias(connect):
-    pass
-
-def test_boot(connect):
-    pass
-
-def test_buffers(connect):
-    pass
-
-def test_cns(connect):
-    pass
-
-def test_errdisable(connect):
-    pass
-
-def test_exception(connect):
-    pass
-
-def test_hostname(connect):
-    pass
-
-def test_priority_list(connect):
-    pass
-
-def test_privilege(connect):
-    pass
-
-def test_queue_list(connect):
-    pass
-
-def test_rmon(connect):
-    pass
-
-def test_rtr(connect):
-    pass
-
-def test_system_mtu(connect):
-    pass
-
-def test_udld(connect):
-    pass
-
-def test_vmps(connect):
-    pass
-
-def test_wrr_queue(connect):
-    pass
-
-def test_duplex(connect):
-    pass
-
-def test_hold_queue(connect):
-    pass
-
-def test_keepalive(connect):
-    pass
-
-def test_timeout(connect):
-    pass
+    vlans = all_vlans(conn=connect)
+    for vlan in vlans:
+        response = read_all(connection=connect, command='show ip  igmp snooping vlan {} | begin Vlan {}\n'.format(vlan[0], vlan[0]))
+        if "Disabled" in response.split("\n")[3]:
+            raise Exception(colored("IGMP snooping is not enabled for VLAN \
+{}. This could lead to DoS attacks.".format(vlan[0]), "red"))
