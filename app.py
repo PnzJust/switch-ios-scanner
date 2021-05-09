@@ -382,24 +382,30 @@ def test_default_gateway(connect):
         warnings.warn(colored("Switch is accessible from the internet throught the ip: " + str(response[2]), "yellow"), Warning)
 
 
-
-def test_udld(connect):
-    pass
-
 def test_vmps(connect):
-    pass
+    response = read_all(connection=connect, command='show running-config | include vmps server\n', timeout=5)
+    response = response.split("\n")
+    if len(response) < 4:
+        warnings.warn(colored("VMPS is not enabled.", "yellow"), Warning)
+    else:
+        response = response[2].split(" ")
+        response = response[2]
+        print("Switch has VMPS enabled to ip: ", response)
 
-def test_wrr_queue(connect):
-    pass
-
-def test_duplex(connect):
-    pass
 
 def test_tacacs_server(connect):
-    pass
-
-def test_tftp_server(connect):
-    pass
-
-def test_etherchannel(connect):
-    pass
+    response = read_all(connection=connect, command='show running-config | include tacacs-server\n', timeout=5)
+    response = response.split("\n")
+    host = False
+    key = False
+    for e in response:
+        if "host" in e:
+            host = True
+            print("Tacacs Server is: ", e.split(" ")[-1])
+        elif "key" in e:
+            key = True
+    if not host:
+        warnings.warn(colored("Switch is running without a tacacs server", "yellow"), Warning)
+    elif not key:
+        warnings.warn(colored("Switch is connecting to a tacacs server without \
+any authentication key.", "yellow"))
