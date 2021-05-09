@@ -321,7 +321,7 @@ def test_banner_login(connect):
     response = response.split("\n")
     if len(response) > 3:
         response = response[2].split(" ")[2][2:-3]
-        print("Banner login: ", response)
+        print("\nBanner login: ", response)
 
 
 def test_banner_motd(connect):
@@ -329,7 +329,7 @@ def test_banner_motd(connect):
     response = response.split("\n")
     if len(response) > 3:
         response = response[2].split(" ")[2][2:-3]
-        print("Banner motd: ", response)
+        print("\nBanner motd: ", response)
 
 
 def test_igmp_snooping(connect):
@@ -339,3 +339,67 @@ def test_igmp_snooping(connect):
         if "Disabled" in response.split("\n")[3]:
             raise Exception(colored("IGMP snooping is not enabled for VLAN \
 {}. This could lead to DoS attacks.".format(vlan[0]), "red"))
+
+
+def test_aaa(connect):
+    response = read_all(connection=connect, command='show running-config | include aaa\n', timeout=5)
+    if len(response.split("\n")) < 4:
+        warnings.warn(colored("AAA protocol is not enabled on your switch.", "yellow"), Warning)
+
+
+def test_errdisable(connect):
+    response = read_all(connection=connect, command='show errdisable detect\n')
+    response = re.findall(r"([a-zA-Z0-9]*) +(Enabled|Disabled).*", response)
+    for e in response:
+        if e[1] == 'Disabled':
+            warnings.warn(colored("{} has errdisable detection disabled".format(e[0]), "yellow"), Warning)
+
+
+def test_hostname(connect):
+    response = read_all(connection=connect, command='show running-config | include hostname\n', timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2]
+        response = response.split(" ")[1]
+        response = response[:-1]
+        print("\nSwitch hostname: ", response)
+
+
+def test_privilege(connect):
+    response = read_all(connection=connect, command='show privilege\n')
+    response = response.split('\n')
+    response = response[2][:-1]
+    print(response)
+
+
+def test_default_gateway(connect):
+    response = read_all(connection=connect, command='show running-config | include ip default-gateway\n', timeout=5)
+    response = response.split("\n")
+    if len(response) < 4:
+        print("Switch is not accessible from the internet")
+    else:
+        response = response[2].split(" ")
+        warnings.warn(colored("Switch is accessible from the internet throught the ip: " + str(response[2]), "yellow"), Warning)
+
+
+
+def test_udld(connect):
+    pass
+
+def test_vmps(connect):
+    pass
+
+def test_wrr_queue(connect):
+    pass
+
+def test_duplex(connect):
+    pass
+
+def test_tacacs_server(connect):
+    pass
+
+def test_tftp_server(connect):
+    pass
+
+def test_etherchannel(connect):
+    pass
