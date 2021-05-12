@@ -3,7 +3,6 @@
 import json
 import warnings
 import pytest
-import paramiko
 import regex as re
 from termcolor import colored
 
@@ -23,17 +22,20 @@ def args():
     elif file_args["PROTOCOL"] not in ["telnet", "ssh"]:
         raise Exception("Invalid protocol. Use telnet or ssh.")
 
-    if "PASSWORD" not in file_args:
-        raise Exception("PASSWORD should be mentioned in config.json")
+    if file_args["PROTOCOL"] == "ssh":
+        if "USERNAME" not in file_args:
+            raise Exception("USERNAME should be mentioned in config.json")
+        if "SSH_PASSWORD" not in file_args:
+            raise Exception("SSH_PASSWORD should be mentioned in config.json")
+
+    if "SWITCH_PASSWORD" not in file_args:
+        raise Exception("SWITCH_PASSWORD should be mentioned in config.json")
 
     if "PORT" not in file_args:
         raise Exception("PORT should be mentioned in config.json")
     elif int(file_args["PORT"]) != file_args["PORT"] or \
          int(file_args["PORT"]) not in range(65536):
         raise Exception("Invalid port.")
-
-    if "TIMEOUT" not in file_args:
-        raise Exception("TIMEOUT should be mentioned in config.json")
 
     return file_args
 
@@ -44,26 +46,35 @@ def connect(args):
         from telnetlib import Telnet
         conn = Telnet(args['IP'], args['PORT'])
         conn.read_until(b'Password: ')
-        conn.write(str.encode(args['PASSWORD'] + '\n'))
+        conn.write(str.encode(args['SWITCH_PASSWORD'] + '\n'))
         conn.write(b'enable\n')
-        if args['CONSOLE_PASSWD']:
+        if args['ENABLE_PASSWD']:
             conn.read_until(b'Password: ')
-            conn.write(str.encode(args['CONSOLE_PASSWD'] + '\n'))
+            conn.write(str.encode(args['ENABLE_PASSWD'] + '\n'))
     elif args['PROTOCOL'] == "ssh":
-        # SSH coming soon
-        pass
-
+        import paramiko
+        conn = paramiko.Transport((args['IP'], args['PORT']))
+        conn.connect(username=args['USERNAME'], password=args['SSH_PASSWORD'])
+        conn = conn.open_channel(kind='session')
+        
     yield conn
-
     conn.close()
 
 
 def read_all(connection, command, timeout=1):
-    connection.write(str.encode(command))
-    resp = connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
-    while resp.endswith(b'--More-- '):
-        connection.write(b' ')
-        resp += connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
+    if hasattr(connection, 'write'): # if is telnet
+        connection.write(str.encode(command))
+        resp = connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
+        while resp.endswith(b'--More-- '):
+            connection.write(b' ')
+            resp += connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
+    elif hasattr(connection, 'exec_command'): # is is ssh
+        connection.exec_command(command)
+        resp = connection.recv(4096)
+        while resp.endswith(b'--More-- '):
+            connection.exec_command(b' ')
+            resp += connection.recv(4096)
+
     return resp.decode('ascii')
 
 
@@ -218,7 +229,6 @@ def test_vtp_password(connect):
     status = re.search(r"VTP Operating Mode +: (.*)", response).groups()
     status = status[0][:-1]
     if status != 'Transparent':
-        print(status)
         response = read_all(connection=connect, command='show vtp password\n')
         if ':' not in response:
             raise Exception(colored("VTP is runnig without a password.", "red"))

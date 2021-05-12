@@ -1,8 +1,7 @@
 {
     "IP": "192.168.1.200",
     "PROTOCOL": "telnet",
-    "PASSWORD": "pass3",
+    "SWITCH_PASSWORD": "pass3",
     "PORT": 23,
-    "CONSOLE_PASSWD": "pass3",
-    "TIMEOUT": 2
+    "ENABLE_PASSWD": "pass3"
 }
