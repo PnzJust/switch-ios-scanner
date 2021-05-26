@@ -56,7 +56,13 @@ def connect(args):
         conn = paramiko.Transport((args['IP'], args['PORT']))
         conn.connect(username=args['USERNAME'], password=args['SSH_PASSWORD'])
         conn = conn.open_channel(kind='session')
-        
+    
+    # Check if the connection is established
+    response = read_all(connection=conn, command='show version\n')
+    if len(response.split("\n")) < 4:
+        raise Exception(colored("The connection could not be established using \
+your credentials. Check them again: " + str(args) , "red"))
+
     yield conn
     conn.close()
 
@@ -68,7 +74,7 @@ def read_all(connection, command, timeout=1):
         while resp.endswith(b'--More-- '):
             connection.write(b' ')
             resp += connection.read_until(b'FINAL_INEXISTENT', timeout=timeout)
-    elif hasattr(connection, 'exec_command'): # is is ssh
+    elif hasattr(connection, 'exec_command'): # it is ssh
         connection.exec_command(command)
         resp = connection.recv(4096)
         while resp.endswith(b'--More-- '):
@@ -225,7 +231,7 @@ config file.", "yellow"), Warning)
 
 def test_vtp_password(connect):
     # de preferat sa aiba o parola (sh vtp status)
-    response = read_all(connection=connect, command='show vtp status\n')
+    response = read_all(connection=connect, command='show vtp status\n', timeout=2)
     status = re.search(r"VTP Operating Mode +: (.*)", response).groups()
     status = status[0][:-1]
     if status != 'Transparent':
