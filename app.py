@@ -191,9 +191,9 @@ def test_console_password(connect):
     password = False
     password_encrypted = False
     for e in line_console_0_response:
-        if e.startswith('login'):
+        if 'login' in e:
             login = True
-        elif e.startswith('password'):
+        elif 'password' in e:
             password = True
             if len(e.split(" ")) > 2:
                 password_encrypted = True
@@ -237,7 +237,10 @@ def test_vtp_password(connect):
     if status != 'Transparent':
         response = read_all(connection=connect, command='show vtp password\n')
         if ':' not in response:
-            raise Exception(colored("VTP is runnig without a password.", "red"))
+            raise Exception(colored("VTP is runnig without a password. \
+This missconfiguration could lead to a DoS through VTP spoofing. \
+If you want to use this protocol you should use it with a strong password. \
+Eg. command: Switch(config)#vtp password ^FV'(Oq2_ .", "red"))
 
 
 def test_telnet(connect):
@@ -306,25 +309,6 @@ def test_all_ports_are_healthy(connect):
             warnings.warn(colored("{} is not ok.".format(e[0]), "yellow"), Warning)
 
 
-def test_return_ips(connect):
-    response = read_all(connection=connect,
-                        command='show ip interface brief | exclude unassigned\n')
-    response = re.findall(r"((FastEthernet|GigabitEthernet|Vlan)([0-9]*/*)*) +(.*) +(.*)", response)
-    if response:
-        print("\nInterfaces IPs:")
-        for e in response:
-            print ("{}: {}".format(e[0], e[3].split(" ")[0]))
-
-
-def test_return_active_vlans(connect):
-    response = read_all(connection=connect, command='show vlan brief\n')
-    response = re.findall(r"([0-9]+) +([a-zA-Z0-9]*) +active(.*)", response)
-    if response:
-        print("\nActive Vlans and their names:")
-        for e in response:
-            print("VLAN{} <-> {}".format(e[0], e[1]))
-
-
 def test_802_1x(connect):
     # sysauthcontrol should be Enabled
     response = read_all(connection=connect, command='show dot1x | include Sysauthcontrol\n')
@@ -355,26 +339,6 @@ def test_stp_loopguard(connect):
         raise Exception(colored("LOOP guard is disabled. This could lead to STP attacks.", "red"))
 
 
-def test_banner_login(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include banner login\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) > 3:
-        response = response[2].split(" ")[2][2:-3]
-        print("\nBanner login: ", response)
-
-
-def test_banner_motd(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include banner motd\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) > 3:
-        response = response[2].split(" ")[2][2:-3]
-        print("\nBanner motd: ", response)
-
-
 def test_igmp_snooping(connect):
     vlans = all_vlans(conn=connect)
     for vlan in vlans:
@@ -401,38 +365,6 @@ def test_errdisable(connect):
         if e[1] == 'Disabled':
             warnings.warn(colored("{} has errdisable detection disabled".format(e[0]), "yellow"),
                           Warning)
-
-
-def test_hostname(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include hostname\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) > 3:
-        response = response[2]
-        response = response.split(" ")[1]
-        response = response[:-1]
-        print("\nSwitch hostname: ", response)
-
-
-def test_privilege(connect):
-    response = read_all(connection=connect, command='show privilege\n')
-    response = response.split('\n')
-    response = response[2][:-1]
-    print(response)
-
-
-def test_default_gateway(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include ip default-gateway\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) < 4:
-        print("Switch is not accessible from the internet")
-    else:
-        response = response[2].split(" ")
-        warnings.warn(colored("Switch is accessible from the internet throught the \
-ip: " + str(response[2]), "yellow"), Warning)
 
 
 def test_vmps(connect):
@@ -466,3 +398,84 @@ def test_tacacs_server(connect):
     elif not key:
         warnings.warn(colored("Switch is connecting to a tacacs server without \
 any authentication key.", "yellow"))
+
+
+def test_return_ips(connect):
+    response = read_all(connection=connect,
+                        command='show ip interface brief | exclude unassigned\n')
+    response = re.findall(r"((FastEthernet|GigabitEthernet|Vlan)([0-9]*/*)*) +(.*) +(.*)", response)
+    if response:
+        print("\nInterfaces IPs:")
+        for e in response:
+            print ("{}: {}".format(e[0], e[3].split(" ")[0]))
+    else:
+        print("\n")
+
+
+def test_return_active_vlans(connect):
+    response = read_all(connection=connect, command='show vlan brief\n')
+    response = re.findall(r"([0-9]+) +([a-zA-Z0-9]*) +active(.*)", response)
+    if response:
+        print("\nActive Vlans and their names:")
+        for e in response:
+            print("VLAN{} <-> {}".format(e[0], e[1]))
+    else:
+        print("\n")
+
+
+def test_banner_login(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include banner login\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2].split(" ")[2][2:-3]
+        print("\nBanner login: ", response)
+    else:
+        print("\n")
+
+
+def test_banner_motd(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include banner motd\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2].split(" ")[2][2:-3]
+        print("\nBanner motd: ", response)
+    else:
+        print("\n")
+
+
+def test_hostname(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include hostname\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2]
+        response = response.split(" ")[1]
+        response = response[:-1]
+        print("\nSwitch hostname: ", response)
+    else:
+        print("\n")
+
+
+def test_privilege(connect):
+    response = read_all(connection=connect, command='show privilege\n')
+    response = response.split('\n')
+    response = response[1][:-1]
+    print(response)
+
+
+def test_default_gateway(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include ip default-gateway\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) < 4:
+        print("Switch is not accessible from the internet")
+    else:
+        response = response[2].split(" ")
+        warnings.warn(colored("Switch is accessible from the internet through the \
+ip: " + str(response[2]), "yellow"), Warning)
