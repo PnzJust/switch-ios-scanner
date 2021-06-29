@@ -205,11 +205,11 @@ without a password. Enable command: Switch(config-line)#login", "yellow"), Warni
     if not password:
         warnings.warn(colored("You forgot to set a pass on your \
 console connection. Without this password everybody will be able to connect \
-to your switch.", "yellow"), Warning)
+to your switch. Command: Switch(config-line)#password something", "yellow"), Warning)
     elif not password_encrypted:
         warnings.warn(colored("You forgot to encrypt your password for \
 console connection. Without this the password is stored unencrypted in your \
-config file.", "yellow"), Warning)
+config file. Command: Switch(config)#service password-encryption", "yellow"), Warning)
 
 
 def test_enable_password(connect):
@@ -220,13 +220,14 @@ def test_enable_password(connect):
     password = response.split('\n')
     if len(password) < 4:
         warnings.warn(colored("You forgot to use a password for switch configuration. \
-Without this everybody can config the switch without a password.", "yellow"), Warning)
+Without this everybody can config the switch without a password. Command:\
+Switch(config)#enable password something", "yellow"), Warning)
     else:
         password = password[2].split(" ")
         if len(password) < 4:
             warnings.warn(colored("You forgot to encrypt your password for \
 switch configuration. Without this the password is stored unencrypted in your \
-config file.", "yellow"), Warning)
+config file. Command: Switch(config)#service password-encryption", "yellow"), Warning)
 
 
 def test_vtp_password(connect):
@@ -271,7 +272,8 @@ def test_dhcp(connect):
                         timeout=5)
     if len(response.split('\n')) < 4:
         raise Exception(colored("DHCP is not runnig in snooping mode. This \
-could lead to vulnerabilites like DHCP starving or DHCP rogue.", "red"))
+could lead to vulnerabilites like DHCP starving or DHCP rogue. Enable the DHCP snooping.\
+Command: Switch(config-if)#ip dhcp snooping trust/limit", "red"))
 
 
 def test_tcp_small_servers(connect):
@@ -280,7 +282,8 @@ def test_tcp_small_servers(connect):
                         command='show running-config | include service tcp-small-servers\n',
                         timeout=5)
     if len(response.split('\n')) > 3:
-        warnings.warn(colored("Tcp-small-servers service is runnig.", "yellow"), Warning)
+        warnings.warn(colored("Tcp-small-servers service is runnig. This is used for switch \
+diagnostics. You can disable: Switch(config)#no service tcp-small-servers", "yellow"), Warning)
 
 
 def test_udp_small_servers(connect):
@@ -289,7 +292,8 @@ def test_udp_small_servers(connect):
                         command='show running-config | include service udp-small-servers\n',
                         timeout=5)
     if len(response.split('\n')) > 3:
-        warnings.warn(colored("Udp-small-servers service is runnig.", "yellow"), Warning)
+        warnings.warn(colored("Udp-small-servers service is runnig.This is used for switch \
+diagnostics. You can disable: Switch(config)#no service udp-small-servers", "yellow"), Warning)
 
 
 def test_service_finger(connect):
@@ -314,14 +318,16 @@ def test_802_1x(connect):
     response = read_all(connection=connect, command='show dot1x | include Sysauthcontrol\n')
     if "Disabled" in response:
         raise Exception(colored("802.1X authentication mechanism is not enabled. \
-Now devices could attach to LANs and WLANs.", "red"))
+Now devices could attach to LANs and WLANs. Enable command: Switch(config-if)#dot1x \
+reauthentication", "red"))
 
 
 def test_stp_bpduguard(connect):
     response = read_all(connection=connect,
                         command='show spanning-tree summary totals | include BPDU Guard\n')
     if "disabled" in response:
-        raise Exception(colored("BPDU guard is disabled. This could lead to STP attacks.", "red"))
+        raise Exception(colored("BPDU guard is disabled. This could lead to STP attacks. Enable \
+command: Switch(config-if)#spanning-tree bpduguard enable", "red"))
 
 
 def test_stp_root_guard(connect):
@@ -329,25 +335,28 @@ def test_stp_root_guard(connect):
                         command='show running-config | include spanning-tree guard root\n',
                         timeout=5)
     if len(response.split('\n')) < 4:
-        warnings.warn(colored("STP guard root is not enabled on your switch.", "yellow"), Warning)
+        warnings.warn(colored("STP guard root is not enabled on your switch. Enable command: \
+Switch(config-if)#spanning-tree guard root", "yellow"), Warning)
 
 
 def test_stp_loopguard(connect):
     response = read_all(connection=connect,
                         command='show spanning-tree summary totals | include Loopguard Default\n')
     if "disabled" in response:
-        raise Exception(colored("LOOP guard is disabled. This could lead to STP attacks.", "red"))
+        raise Exception(colored("LOOP guard is disabled. This could lead to STP attacks. Enable command: \
+Switch(config-if)#spanning-tree guard loop", "red"))
 
 
 def test_igmp_snooping(connect):
     vlans = all_vlans(conn=connect)
     for vlan in vlans:
         response = read_all(connection=connect,
-                            command='show ip  igmp snooping \
+                            command='show ip igmp snooping \
 vlan {} | begin Vlan {}\n'.format(vlan[0], vlan[0]))
         if "Disabled" in response.split("\n")[3]:
             raise Exception(colored("IGMP snooping is not enabled for VLAN \
-{}. This could lead to DoS attacks.".format(vlan[0]), "red"))
+{}. This could lead to DoS attacks. Enable command: Switch(config)#ip igmp snooping \
+vlan {}.".format(vlan[0], vlan[0]), "red"))
 
 
 def test_aaa(connect):
@@ -355,7 +364,8 @@ def test_aaa(connect):
                         command='show running-config | include aaa\n',
                         timeout=5)
     if len(response.split("\n")) < 4:
-        warnings.warn(colored("AAA protocol is not enabled on your switch.", "yellow"), Warning)
+        warnings.warn(colored("AAA protocol is not enabled on your switch. Enable command: \
+Switch(config)#aaa new-model", "yellow"), Warning)
 
 
 def test_errdisable(connect):
@@ -400,6 +410,44 @@ def test_tacacs_server(connect):
 any authentication key.", "yellow"))
 
 
+def test_banner_login(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include banner login\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2].split(" ")[2][2:-3]
+        print("\nBanner login: ", response)
+    else:
+        print("\n")
+
+
+def test_hostname(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include hostname\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2]
+        response = response.split(" ")[1]
+        response = response[:-1]
+        print("\nSwitch hostname: ", response)
+    else:
+        print("\n")
+
+
+def test_banner_motd(connect):
+    response = read_all(connection=connect,
+                        command='show running-config | include banner motd\n',
+                        timeout=5)
+    response = response.split("\n")
+    if len(response) > 3:
+        response = response[2].split(" ")[2][2:-3]
+        print("\nBanner motd: ", response)
+    else:
+        print("\n")
+
+
 def test_return_ips(connect):
     response = read_all(connection=connect,
                         command='show ip interface brief | exclude unassigned\n')
@@ -419,44 +467,6 @@ def test_return_active_vlans(connect):
         print("\nActive Vlans and their names:")
         for e in response:
             print("VLAN{} <-> {}".format(e[0], e[1]))
-    else:
-        print("\n")
-
-
-def test_banner_login(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include banner login\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) > 3:
-        response = response[2].split(" ")[2][2:-3]
-        print("\nBanner login: ", response)
-    else:
-        print("\n")
-
-
-def test_banner_motd(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include banner motd\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) > 3:
-        response = response[2].split(" ")[2][2:-3]
-        print("\nBanner motd: ", response)
-    else:
-        print("\n")
-
-
-def test_hostname(connect):
-    response = read_all(connection=connect,
-                        command='show running-config | include hostname\n',
-                        timeout=5)
-    response = response.split("\n")
-    if len(response) > 3:
-        response = response[2]
-        response = response.split(" ")[1]
-        response = response[:-1]
-        print("\nSwitch hostname: ", response)
     else:
         print("\n")
 

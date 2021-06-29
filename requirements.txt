@@ -1,5 +1,4 @@
 termcolor
-argparse
 regex
 pytest
 paramiko
